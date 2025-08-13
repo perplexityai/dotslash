@@ -8,6 +8,7 @@
  * above-listed licenses.
  */
 
+use std::env;
 use std::error::Error as StdError;
 use std::ffi::OsStr;
 use std::fmt;
@@ -27,6 +28,10 @@ use crate::util::HttpStatus;
 
 const NUM_RETRYABLE_CURL_MAX_ATTEMPTS: u8 = 3;
 const NUM_TRANSIENT_ERROR_CURL_MAX_ATTEMPTS: u64 = 3;
+
+/// Environment variable that enables netrc support for curl commands.
+/// When set to "true", adds --netrc to curl commands.
+const DOTSLASH_NETRC_ENV: &str = "DOTSLASH_NETRC";
 
 /// Specify a custom user-agent when making requests. In the unfortunate event
 /// that a site hosting an artifact gets overloaded with requests, hopefully
@@ -293,6 +298,11 @@ impl CurlCommand<'_> {
 
         curl_command.arg("--user-agent");
         curl_command.arg(USER_AGENT);
+
+        // Add --netrc if DOTSLASH_NETRC environment variable is set to "true"
+        if env::var(DOTSLASH_NETRC_ENV).unwrap_or_default() == "true" {
+            curl_command.arg("--netrc");
+        }
 
         curl_command.arg(url);
 
