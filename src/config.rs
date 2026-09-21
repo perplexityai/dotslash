@@ -13,7 +13,8 @@ use std::collections::HashMap;
 use anyhow::Context as _;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_jsonrc::value::Value;
+use serde_json::Value;
+use thiserror::Error;
 
 use crate::artifact_path::ArtifactPath;
 use crate::digest::Digest;
@@ -109,6 +110,20 @@ pub enum HashAlgorithm {
     Sha256,
 }
 
+/// Returned when `parse_file` fails to deserialize the JSON into a
+/// `ConfigFile` and the JSON contains an `"oncall"` field, indicating
+/// this is an internal (Meta) DotSlash file rather than an OSS one.
+#[derive(Debug, Error)]
+#[error(
+    "this appears to be an internal (Meta) DotSlash file \
+     (it has an \"oncall\" field) and is not supported by \
+     the open-source DotSlash binary"
+)]
+pub struct IncompatibleDotslashBinaryError {
+    #[source]
+    pub source: serde_json::Error,
+}
+
 pub fn parse_file(data: &str) -> anyhow::Result<(Value, ConfigFile)> {
     // Check to see whether the DotSlash file starts with the proper shebang.
     let data = data
@@ -121,8 +136,15 @@ pub fn parse_file(data: &str) -> anyhow::Result<(Value, ConfigFile)> {
             anyhow::format_err!("DotSlash file must start with `{REQUIRED_HEADER}`")
         })?;
 
-    let value = serde_jsonrc::from_str::<Value>(data)?;
-    let config_file = ConfigFile::deserialize(&value)?;
+    let value = jsonc_parser::parse_to_serde_value(data, &Default::default())?
+        .with_context(|| anyhow::format_err!("Failed to parse JSON"))?;
+    let config_file = ConfigFile::deserialize(&value).map_err(|err| {
+        if value.get("oncall").is_some() {
+            anyhow::Error::from(IncompatibleDotslashBinaryError { source: err })
+        } else {
+            anyhow::Error::from(err)
+        }
+    })?;
     Ok((value, config_file))
 }
 
@@ -173,7 +195,7 @@ mod tests {
                         .unwrap(),
                         format: ArtifactFormat::Tar,
                         path: "bindir/my_tool".parse().unwrap(),
-                        providers: vec![serde_jsonrc::json!({
+                        providers: vec![serde_json::json!({
                             "type": "http",
                             "url": "https://example.com/my_tool.tar",
                         })],
@@ -283,7 +305,7 @@ mod tests {
                         .unwrap(),
                         format: ArtifactFormat::Plain,
                         path: "minesweeper.exe".parse().unwrap(),
-                        providers: vec![serde_jsonrc::json!({
+                        providers: vec![serde_json::json!({
                             "type": "http",
                             "url": "https://foo.com",
                         })],

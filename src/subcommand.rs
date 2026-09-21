@@ -15,7 +15,7 @@ use std::io;
 use std::str::FromStr;
 
 use anyhow::Context as _;
-use digest::Digest as _;
+use sha2::Digest as _;
 use sha2::Sha256;
 use thiserror::Error;
 
@@ -51,6 +51,9 @@ pub enum Subcommand {
     /// Fetch and cache an artifact but do not execute it
     Fetch,
 
+    /// Print where the artifact would be cached, without fetching it
+    GetExtractedCachePath,
+
     /// Parse a DotSlash file and print its data as JSON
     Parse,
 
@@ -74,6 +77,7 @@ impl fmt::Display for Subcommand {
             Self::CacheDir => "cache-dir",
             Self::ArtifactPath => "artifact-path",
             Self::Fetch => "fetch",
+            Self::GetExtractedCachePath => "get-extracted-cache-path",
             Self::Parse => "parse",
             Self::Sha256 => "sha256",
             Self::Version => "version",
@@ -93,6 +97,7 @@ impl FromStr for Subcommand {
             "cache-dir" => Ok(Subcommand::CacheDir),
             "artifact-path" => Ok(Subcommand::ArtifactPath),
             "fetch" => Ok(Subcommand::Fetch),
+            "get-extracted-cache-path" => Ok(Subcommand::GetExtractedCachePath),
             "parse" => Ok(Subcommand::Parse),
             "sha256" => Ok(Subcommand::Sha256),
             "version" => Ok(Subcommand::Version),
@@ -134,7 +139,7 @@ fn run_subcommand_impl(subcommand: &Subcommand, args: &mut ArgsOs) -> anyhow::Re
             let mut file = fs_ctx::file_open(file_arg)?;
             let mut hasher = blake3::Hasher::new();
             io::copy(&mut file, &mut hasher)?;
-            let hex_digest = format!("{:x}", hasher.finalize());
+            let hex_digest = format!("{}", hasher.finalize().to_hex());
             println!("{}", hex_digest);
         }
 
@@ -191,13 +196,22 @@ fn run_subcommand_impl(subcommand: &Subcommand, args: &mut ArgsOs) -> anyhow::Re
             println!("{}", artifact_location.executable.display());
         }
 
+        Subcommand::GetExtractedCachePath => {
+            let file_arg = take_exactly_one_arg(args)?;
+            let dotslash_data = fs_ctx::read_to_string(file_arg)?;
+            let dotslash_cache = DotslashCache::new();
+            let (_artifact_entry, artifact_location) =
+                locate_artifact(&dotslash_data, &dotslash_cache)?;
+            println!("{}", artifact_location.executable.display());
+        }
+
         Subcommand::Parse => {
             let file_arg = take_exactly_one_arg(args)?;
             let dotslash_data = fs_ctx::read_to_string(file_arg)?;
             let (original_json, _config_file) =
                 parse_file(&dotslash_data).context("failed to parse file")?;
             let json =
-                serde_jsonrc::to_string(&original_json).context("failed to serialize value")?;
+                serde_json::to_string(&original_json).context("failed to serialize value")?;
             println!("{json}");
         }
 
@@ -233,17 +247,19 @@ Supported platform: {}
 Your DotSlash cache is: {}
 
 dotslash also has these special experimental commands:
-  dotslash --help                     Print this message
-  dotslash --version                  Print the version of dotslash
-  dotslash -- b3sum FILE              Compute blake3 hash
-  dotslash -- clean                   Clean dotslash cache
-  dotslash -- create-url-entry URL    Generate "http" provider entry
-  dotslash -- cache-dir               Print path to the cache directory
-  dotslash -- artifact-path DOTSLASH_FILE  Print where artifact would be cached
-  dotslash -- fetch DOTSLASH_FILE     Prepare for execution, but print exe path
-                                      instead of executing
-  dotslash -- parse DOTSLASH_FILE     Parse the dotslash file
-  dotslash -- sha256 FILE             Compute sha256 sum of the file
+  dotslash --help                   Print this message
+  dotslash --version                Print the version of dotslash
+  dotslash -- b3sum FILE            Compute blake3 hash
+  dotslash -- clean                 Clean dotslash cache
+  dotslash -- create-url-entry URL  Generate "http" provider entry
+  dotslash -- cache-dir             Print path to the cache directory
+  dotslash -- fetch DOTSLASH_FILE   Prepare for execution, but print exe path
+                                    instead of executing
+  dotslash -- get-extracted-cache-path DOTSLASH_FILE
+                                    Print where the artifact would be cached,
+                                    without fetching it
+  dotslash -- parse DOTSLASH_FILE   Parse the dotslash file
+  dotslash -- sha256 FILE           Compute sha256 sum of the file
 
 Learn more at {}
 "#,

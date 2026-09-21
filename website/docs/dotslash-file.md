@@ -121,7 +121,7 @@ properties:
 :::tip
 
 The JSON payload in a DotSlash file is parsed with a
-[lenient JSON parser](https://crates.io/crates/serde_jsonrc) that allows for
+[lenient JSON parser](https://crates.io/crates/jsonc-parser) that allows for
 trailing commas as well as `//` and `/*`-style comments.
 
 :::
@@ -201,10 +201,15 @@ DotSlash what type of provider it is, though if unspecified, `"http"` is
 assumed. Each provider defines its own schema with respect to the other fields
 that must be specified on the JSON object.
 
-Currently, DotSlash supports two providers out of the box: the **HTTP Provider**
-(`"type": "http"`) and the **GitHub Release Provider**
-(`"type": "github-release"`). (At the time of this writing, there is no way to
-add custom providers without forking DotSlash.)
+Currently, DotSlash incldues three providers:
+
+- HTTP Provider: `"type": "http"`
+- GitHub Release Provider: `"type": "github-release"`
+- S3 Provider: `"type": "s3"`
+- GCS Provider: `"type": "gcs"`
+
+At the time of this writing, there is no way to
+add custom providers without forking DotSlash.
 
 Each provider in the `providers` list will be tried, in order by default, to
 fetch the artifact, until one succeeds. The provider type need not be unique
@@ -344,6 +349,36 @@ be:
 
 And the `--repo` value passed to `gh` would also be changed, accordingly.
 
+### S3 Provider
+
+The S3 provider allows fetching artifacts from S3 (or any other compatible
+object store) using the [`aws` CLI](https://aws.amazon.com/cli/). The advantage
+of the S3 provider is that it allows you to retrieve artifacts from S3 buckets
+that are not accessible via HTTP (e.g. private).
+
+```json
+{
+  "type": "s3",
+  "repo": "example",
+  "key": "key",
+  "region": "us-west-2"
+}
+```
+
+gets translated into the following command in order to do the fetch:
+
+```shell
+aws s3 cp --region us-weset-2 s3://example/key TEMPFILE_IN_DOTSLASH_CACHE
+```
+
+Note: the "region" key is optional. By default, your default AWS region will be
+used.
+
+You will need to have the `aws` CLI configured to pick up the required
+credentials. Either via its built-in credentials mechanism, or wrapping the
+`dotslash` invocation tools such as
+[`aws-vault`](https://github.com/99designs/aws-vault).
+
 ## Artifact Format
 
 Although it may appear that `format` can be an arbitrary file extension,
@@ -442,6 +477,9 @@ Looking at the `hermes` example above:
 At Meta, we have found compression to be a win, but if for some reason you
 prefer to fetch your executable as an uncompressed single file, you can omit the
 `"format"` field, but `"path"` is still required.
+
+For single-file artifacts on Unix, if the fetched file has no executable bits,
+DotSlash makes the cached file executable with mode `0555` (`r-xr-xr-x`).
 
 ## Arg0
 

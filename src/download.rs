@@ -16,9 +16,9 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use digest::Digest as _;
-use rand::distributions::Distribution;
-use serde_jsonrc::value::Value;
+use rand::distr::Distribution;
+use serde_json::Value;
+use sha2::Digest as _;
 use sha2::Sha256;
 
 use crate::artifact_location::ArtifactLocation;
@@ -67,7 +67,7 @@ pub fn download_artifact<P: ProviderFactory>(
 
     // Build a list of provider references,
     // and if randomization is enabled, shuffle them.
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let providers = providers_in_order(
         &mut rng,
         &artifact_entry.providers,
@@ -184,7 +184,7 @@ fn providers_in_order<'b>(
 
             // Shuffle the providers using weighted sampling of indexes
             // without duplicates in the result.
-            let dist = rand::distributions::weighted::WeightedIndex::new(&weights)
+            let dist = rand::distr::weighted::WeightedIndex::new(&weights)
                 .map_err(|e| anyhow::anyhow!("error initializing weights: {}", e))?;
             let mut seen = std::collections::HashSet::new();
             while ordered_providers.len() < providers.len() {
@@ -224,7 +224,7 @@ fn verify_artifact(
         HashAlgorithm::Blake3 => {
             let mut hasher = blake3::Hasher::new();
             io::copy(&mut file, &mut hasher).map(|size_in_bytes| {
-                let digest = format!("{:x}", hasher.finalize());
+                let digest = format!("{}", hasher.finalize().to_hex());
                 (size_in_bytes, digest)
             })
         }
@@ -336,12 +336,12 @@ mod tests {
 
     #[test]
     fn providers_in_order_sequential() {
-        let mut rng = rand::thread_rng(); // doesn't matter
+        let mut rng = rand::rng(); // doesn't matter
 
         let providers = vec![
-            serde_jsonrc::from_str(r#"{"type": "a"}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "b"}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "c"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "a"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "b"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "c"}"#).unwrap(),
         ];
 
         let ordered_providers =
@@ -359,9 +359,9 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42); // deterministic for testing
 
         let providers = vec![
-            serde_jsonrc::from_str(r#"{"type": "a"}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "b"}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "c"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "a"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "b"}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "c"}"#).unwrap(),
         ];
 
         let ordered_providers =
@@ -370,7 +370,7 @@ mod tests {
 
         assert_eq!(
             ordered_providers,
-            vec![&providers[0], &providers[2], &providers[1]]
+            vec![&providers[2], &providers[0], &providers[1]]
         );
     }
 
@@ -379,10 +379,10 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42); // deterministic for testing
 
         let providers = vec![
-            serde_jsonrc::from_str(r#"{"type": "a", "weight": 1}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "c", "weight": 10}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "d", "weight": 2}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "a", "weight": 1}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "c", "weight": 10}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "d", "weight": 2}"#).unwrap(),
         ];
 
         let ordered_providers =
@@ -391,7 +391,7 @@ mod tests {
 
         assert_eq!(
             ordered_providers,
-            vec![&providers[1], &providers[2], &providers[0], &providers[3]]
+            vec![&providers[2], &providers[3], &providers[1], &providers[0]]
         );
     }
 
@@ -400,8 +400,8 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42); // deterministic for testing
 
         let providers = vec![
-            serde_jsonrc::from_str(r#"{"type": "a", "weight": 0}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "a", "weight": 0}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
         ];
 
         let result = providers_in_order(&mut rng, &providers, ProvidersOrder::WeightedRandom);
@@ -419,8 +419,8 @@ mod tests {
         let mut rng = rand::rngs::SmallRng::seed_from_u64(42); // deterministic for testing
 
         let providers = vec![
-            serde_jsonrc::from_str(r#"{"type": "a", "weight": -1}"#).unwrap(),
-            serde_jsonrc::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "a", "weight": -1}"#).unwrap(),
+            serde_json::from_str(r#"{"type": "b", "weight": 2}"#).unwrap(),
         ];
 
         let result = providers_in_order(&mut rng, &providers, ProvidersOrder::WeightedRandom);

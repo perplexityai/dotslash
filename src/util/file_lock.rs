@@ -8,7 +8,7 @@
  * above-listed licenses.
  */
 
-//! Wrapper around `fs2::lock_exclusive`.
+//! Wrapper around `std::fs::File::lock`.
 
 use std::fs::File;
 use std::io;
@@ -25,6 +25,13 @@ pub enum FileLockError {
     #[error("failed to get exclusive lock `{0}`")]
     LockExclusive(PathBuf, #[source] io::Error),
 
+    #[cfg_attr(
+        not(dotslash_internal),
+        expect(
+            dead_code,
+            reason = "only constructed by `FileLock::acquire_shared_lock`"
+        )
+    )]
     #[error("failed to get shared lock `{0}`")]
     LockShared(PathBuf, #[source] io::Error),
 }
@@ -49,7 +56,8 @@ impl FileLock {
                 .open(path)
                 .map_err(|e| FileLockError::Create(path.to_path_buf(), e))?;
 
-            fs2::FileExt::lock_exclusive(&lock_file)
+            lock_file
+                .lock()
                 .map_err(|e| FileLockError::LockExclusive(path.to_path_buf(), e))?;
 
             Ok(FileLock {
@@ -59,6 +67,10 @@ impl FileLock {
         inner(path.as_ref())
     }
 
+    #[cfg_attr(
+        not(dotslash_internal),
+        expect(dead_code, reason = "only used by the internal release")
+    )]
     pub fn acquire_shared_lock<P>(path: P) -> Result<FileLock, FileLockError>
     where
         P: AsRef<Path>,
@@ -72,7 +84,8 @@ impl FileLock {
                 .open(path)
                 .map_err(|e| FileLockError::Create(path.to_path_buf(), e))?;
 
-            fs2::FileExt::lock_shared(&lock_file)
+            lock_file
+                .lock_shared()
                 .map_err(|e| FileLockError::LockShared(path.to_path_buf(), e))?;
 
             Ok(FileLock {
@@ -86,7 +99,7 @@ impl FileLock {
 impl Drop for FileLock {
     fn drop(&mut self) {
         if let Some(file) = self.file.take() {
-            drop(fs2::FileExt::unlock(&file));
+            drop(file.unlock());
         }
     }
 }

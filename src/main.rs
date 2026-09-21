@@ -18,12 +18,14 @@ mod dotslash_cache;
 mod download;
 mod execution;
 mod fetch_method;
+mod gcs_provider;
 mod github_release_provider;
 mod http_provider;
 mod locate;
 mod platform;
 mod print_entry_for_url;
 mod provider;
+mod s3_provider;
 mod subcommand;
 mod util;
 

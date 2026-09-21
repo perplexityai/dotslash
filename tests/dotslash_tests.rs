@@ -14,6 +14,8 @@ mod common;
 
 use std::ffi::OsString;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt as _;
 use std::str;
 
 use tempfile::NamedTempFile;
@@ -468,6 +470,31 @@ caused by: [IO_ERROR_NOT_FOUND]
 }
 
 #[test]
+fn internal_dotslash_file_detected() {
+    DotslashTestEnv::try_new()
+        .unwrap()
+        .path_redaction(
+            "[DOTSLASH_FILE]",
+            "[CURRENT_DIR]/tests/fixtures/internal_oncall_file",
+        )
+        .dotslash_command()
+        // Clear PATH so no fallback dotslash binary can be found.
+        .env("PATH", "")
+        .arg("tests/fixtures/internal_oncall_file")
+        .assert()
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(
+            "\
+dotslash error: problem with `[DOTSLASH_FILE]`
+caused by: failed to parse DotSlash file
+caused by: this appears to be an internal (Meta) DotSlash file (it has an \"oncall\" field) and is not supported by the open-source DotSlash binary
+caused by: [..]
+",
+        );
+}
+
+#[test]
 fn dotslash_file_is_a_directory() {
     DotslashTestEnv::try_new()
         .unwrap()
@@ -538,6 +565,9 @@ dotslash also has these special experimental commands:
   dotslash -- cache-dir             Print path to the cache directory
   dotslash -- fetch DOTSLASH_FILE   Prepare for execution, but print exe path
                                     instead of executing
+  dotslash -- get-extracted-cache-path DOTSLASH_FILE
+                                    Print where the artifact would be cached,
+                                    without fetching it
   dotslash -- parse DOTSLASH_FILE   Parse the dotslash file
   dotslash -- sha256 FILE           Compute sha256 sum of the file
 
@@ -875,6 +905,139 @@ fn fetch_simple() -> anyhow::Result<()> {
 
     let metadata = fs::metadata(artifact)?;
     assert!(metadata.is_file());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn fetch_plain_sets_default_executable_permissions() -> anyhow::Result<()> {
+    let mut test_env = DotslashTestEnv::try_new()?;
+    test_env.path_redaction(
+        "[ARTIFACT_EXE]",
+        "[DOTSLASH_CACHE_DIR]/[PACK_PLAIN_HTTP_ARCHIVE_CACHE_DIR]/subdir/[PRINT_ARGV_EXECUTABLE]",
+    );
+
+    let assert = test_env
+        .dotslash_command()
+        .arg("--")
+        .arg("fetch")
+        .arg("tests/fixtures/http__plain__print_argv")
+        .assert()
+        .code(0)
+        .stderr_eq("")
+        .stdout_eq("[ARTIFACT_EXE]\n");
+
+    let artifact = str::from_utf8(&assert.get_output().stdout)?.trim_end();
+
+    let metadata = fs::metadata(artifact)?;
+    assert!(metadata.is_file());
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o555);
+
+    Ok(())
+}
+
+//
+// "get-extracted-cache-path" Command
+//
+
+#[test]
+fn get_extracted_cache_path_simple() -> anyhow::Result<()> {
+    let mut test_env = DotslashTestEnv::try_new()?;
+    test_env.path_redaction(
+        "[ARTIFACT_EXE]",
+        "[DOTSLASH_CACHE_DIR]/[PACK_TGZ_HTTP_ARCHIVE_CACHE_DIR]/subdir/[PRINT_ARGV_EXECUTABLE]",
+    );
+
+    test_env
+        .dotslash_command()
+        .arg("--")
+        .arg("get-extracted-cache-path")
+        .arg("tests/fixtures/http__tar_gz__print_argv")
+        .assert()
+        .code(0)
+        .stderr_eq("")
+        .stdout_eq("[ARTIFACT_EXE]\n");
+
+    Ok(())
+}
+
+#[test]
+fn get_extracted_cache_path_no_args() {
+    DotslashTestEnv::try_new()
+        .unwrap()
+        .dotslash_command()
+        .arg("--")
+        .arg("get-extracted-cache-path")
+        .assert()
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(
+            "\
+dotslash error: 'get-extracted-cache-path' command failed
+caused by: expected exactly one argument but received none
+",
+        );
+}
+
+#[test]
+fn get_extracted_cache_path_extra_args() {
+    DotslashTestEnv::try_new()
+        .unwrap()
+        .dotslash_command()
+        .arg("--")
+        .arg("get-extracted-cache-path")
+        .arg("tests/fixtures/http__tar_gz__print_argv")
+        .arg("extra_arg")
+        .assert()
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(
+            "\
+dotslash error: 'get-extracted-cache-path' command failed
+caused by: expected exactly one argument but received more
+",
+        );
+}
+
+#[test]
+fn get_extracted_cache_path_nonexistent_file() {
+    let env = DotslashTestEnv::try_new().unwrap();
+    let output = env
+        .dotslash_command()
+        .arg("--")
+        .arg("get-extracted-cache-path")
+        .arg("nonexistent_file")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("'get-extracted-cache-path' command failed"));
+    assert!(
+        stderr.contains("No such file or directory")
+            || stderr.contains("cannot find the file")
+            || stderr.contains("The system cannot find the file specified")
+    );
+}
+
+#[test]
+fn get_extracted_cache_path_invalid_dotslash_file() -> anyhow::Result<()> {
+    let mut invalid_file = NamedTempFile::new()?;
+    std::io::Write::write_all(&mut invalid_file, b"not a dotslash file")?;
+
+    let env = DotslashTestEnv::try_new()?;
+    let output = env
+        .dotslash_command()
+        .arg("--")
+        .arg("get-extracted-cache-path")
+        .arg(invalid_file.path())
+        .output()?;
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("'get-extracted-cache-path' command failed"));
+    assert!(stderr.contains("failed to parse"));
 
     Ok(())
 }

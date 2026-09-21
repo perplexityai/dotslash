@@ -8,18 +8,36 @@
 		"vscode": {
 			"extensions": [
 				"GitHub.vscode-github-actions",
-				"nefrob.vscode-just-syntax"
-			]
+				"ms-python.python",
+				"nefrob.vscode-just-syntax",
+				"omnilib.ufmt"
+			],
+			"settings": {
+				"python.analysis.include": [
+					"python/**"
+				],
+				"python.defaultInterpreterPath": ".venv/bin/python3",
+				"python.editor.defaultFormatter": "omnilib.ufmt",
+				"python.editor.formatOnSave": true,
+				"python.terminal.activateEnvInCurrentTerminal": true,
+				"rust-analyzer.linkedProjects": [
+					"./Cargo.toml"
+				]
+			}
 		}
 	},
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+		"ghcr.io/devcontainers/features/docker-in-docker:4": {
 			// We do not need this.
 			"dockerDashComposeVersion": "none",
 			// Install OSS Moby build instead of Docker CE.
 			"moby": true
 		},
+		"ghcr.io/devcontainers/features/rust:1": {},
 		"ghcr.io/devcontainers-extra/features/devcontainers-cli:1": {},
 		"ghcr.io/guiyomh/features/just:0": {}
+	},
+	"postCreateCommand": {
+		"installPythonDependencies": "cd /workspaces/dotslash/python && uv venv --no-project && uv pip install -r requirements-fmt.txt"
 	}
 }

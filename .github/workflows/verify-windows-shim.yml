@@ -1,0 +1,72 @@
+name: verify windows shim
+
+# Rebuilds the Windows shim from dotslash_windows_shim.rs and fails if the
+# checked-in artifacts do not match, so the source cannot change without the
+# regenerated files. The build is byte-for-byte reproducible (rust-lld with
+# /Brepro, plus the pinned toolchain in windows_shim/rust-toolchain.toml), so a
+# plain `git diff` is a reliable check. Each architecture is built on its own
+# native runner to avoid cross-linking.
+#
+# The freshly built shim and linker stub are uploaded before the diff check, so
+# when the check fails you can download the correct artifacts and commit them
+# without needing a local Windows machine.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - windows_shim/**
+      - .github/workflows/verify-windows-shim.yml
+  pull_request:
+    paths:
+      - windows_shim/**
+      - .github/workflows/verify-windows-shim.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows-shim:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x86_64
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: windows_shim
+    steps:
+      - uses: actions/checkout@v6
+      - name: Provision the pinned toolchain and target
+        # `cargo --version` auto-installs the nightly pinned by
+        # rust-toolchain.toml; the target then provisions its precompiled std.
+        run: |
+          cargo --version
+          rustup target add "${{ matrix.target }}"
+      - name: Rebuild the shim
+        run: python release.py "${{ matrix.target }}"
+      - name: Upload the rebuilt artifacts
+        # This runs before the diff check so corrected files remain downloadable
+        # when the committed copies are out of date and the job ultimately fails.
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotslash_windows_shim-${{ matrix.arch }}
+          path: |
+            windows_shim/dotslash_windows_linker_stub.exe
+            windows_shim/dotslash_windows_shim-${{ matrix.arch }}.exe
+          if-no-files-found: error
+      - name: Verify the checked-in artifacts are up to date
+        run: |
+          if ! git diff --exit-code -- 'dotslash_windows_linker_stub.exe' 'dotslash_windows_shim-*.exe'; then
+            echo "::error::Checked-in Windows shim artifacts are out of date. Download 'dotslash_windows_shim-${{ matrix.arch }}' from this run and commit its files, or run 'py release.py' locally."
+            exit 1
+          fi

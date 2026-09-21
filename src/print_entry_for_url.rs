@@ -14,7 +14,6 @@ use std::io;
 use std::io::IsTerminal as _;
 
 use anyhow::Context as _;
-use digest::Digest as _;
 use tempfile::NamedTempFile;
 
 use crate::config::Arg0;
@@ -47,7 +46,7 @@ pub fn print_entry_for_url(url: &OsStr) -> anyhow::Result<()> {
     let mut file = File::open(tempfile.path())?;
     let mut hasher = blake3::Hasher::new();
     let size = io::copy(&mut file, &mut hasher)?;
-    let hex_digest = format!("{:x}", hasher.finalize());
+    let hex_digest = format!("{}", hasher.finalize().to_hex());
 
     let entry_json = serialize_entry(url, size, hex_digest)?;
     println!("{}", entry_json);
@@ -59,7 +58,7 @@ fn serialize_entry(url: &str, size: u64, hex_digest: String) -> anyhow::Result<S
         ArtifactFormat::Plain => {
             "TODO: specify this value; could not guess format from URL".to_owned()
         }
-        format => serde_jsonrc::to_value(format)?.as_str().unwrap().to_owned(),
+        format => serde_json::to_value(format)?.as_str().unwrap().to_owned(),
     };
     let entry = LooseArtifactEntry {
         size,
@@ -67,12 +66,12 @@ fn serialize_entry(url: &str, size: u64, hex_digest: String) -> anyhow::Result<S
         digest: hex_digest.try_into()?,
         format,
         path: "TODO: specify the appropriate `path` for this artifact".parse()?,
-        providers: vec![serde_jsonrc::json!({"url": url})],
+        providers: vec![serde_json::json!({"url": url})],
         arg0: Arg0::default(),
         providers_order: ProvidersOrder::Sequential,
         readonly: true,
     };
-    let entry_json = serde_jsonrc::to_string_pretty(&entry)?;
+    let entry_json = serde_json::to_string_pretty(&entry)?;
     Ok(entry_json)
 }
 
@@ -106,7 +105,7 @@ fn guess_artifact_format_from_url(url: &[u8]) -> ArtifactFormat {
 
 #[cfg(test)]
 mod tests {
-    use serde_jsonrc::value::Value;
+    use serde_json::Value;
 
     use super::*;
 
@@ -117,7 +116,7 @@ mod tests {
         let hex_digest =
             "068464830bd5c276e085a4eab5ef9cc57159f94273db296d6a638e49b78ca55f".to_owned();
         let entry_json = serialize_entry(url, size, hex_digest.clone())?;
-        let entry = serde_jsonrc::from_str::<ArtifactEntry>(&entry_json)?;
+        let entry = serde_json::from_str::<ArtifactEntry>(&entry_json)?;
         // Ensure the output parses as a valid ArtifactEntry.
         assert_eq!(
             ArtifactEntry {
@@ -126,7 +125,7 @@ mod tests {
                 digest: hex_digest.try_into()?,
                 format: ArtifactFormat::TarGz,
                 path: "TODO: specify the appropriate `path` for this artifact".parse()?,
-                providers: vec![serde_jsonrc::json!({"url": url})],
+                providers: vec![serde_json::json!({"url": url})],
                 arg0: Arg0::DotslashFile,
                 providers_order: ProvidersOrder::Sequential,
                 readonly: true,
@@ -145,7 +144,7 @@ mod tests {
         let entry_json = serialize_entry(url, size, hex_digest.clone())?;
         // Note that `entry_json` cannot be deserialized into an ArtifactEntry
         // due to the illegal value for `format`.
-        let expected = serde_jsonrc::json!({
+        let expected = serde_json::json!({
             "size": size,
             "hash": "blake3",
             "digest": hex_digest,
@@ -153,7 +152,7 @@ mod tests {
             "path": "TODO: specify the appropriate `path` for this artifact",
             "providers": [{"url": url}],
         });
-        let actual = serde_jsonrc::from_str::<Value>(&entry_json)?;
+        let actual = serde_json::from_str::<Value>(&entry_json)?;
         assert_eq!(expected, actual);
         Ok(())
     }

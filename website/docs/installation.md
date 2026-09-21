@@ -2,6 +2,21 @@
 sidebar_position: 8
 ---
 
+<FbInternalOnly>
+
+:::info
+
+If you're a Meta Employee trying to use DotSlash on your Meta laptop, don't
+follow this doc.
+
+See the
+[internal Wiki page](https://www.internalfb.com/intern/wiki/?fbid=1082156404104844)
+instead.
+
+:::
+
+</FbInternalOnly>
+
 # Installing DotSlash
 
 We provide a number of ways to install DotSlash.
@@ -95,7 +110,12 @@ jobs:
       - run: ./some_dotslash_file
 ```
 
-## cargo install
+## Package managers
+
+DotSlash is available through several language- and platform-specific package
+managers.
+
+### Cargo
 
 If you are familiar with the Rust toolchain, you can also build and install
 DotSlash using `cargo`:
@@ -110,7 +130,7 @@ update any environment variables to get DotSlash to work.
 Though note that `cargo install` does not create a universal binary, so you may
 be better off [building from source](#build-from-source).
 
-## Install from npm
+### npm
 
 To use DotSlash in Node.js projects, you can install it as a dependency:
 
@@ -137,6 +157,16 @@ const dotslash = require('fb-dotslash');
 const {spawnSync} = require('child_process');
 spawnSync(dotslash, ['./some_dotslash_file'], {stdio: 'inherit']);
 ```
+
+### Scoop
+
+On Windows, DotSlash can be installed via [Scoop](https://scoop.sh):
+
+```shell
+scoop install dotslash
+```
+
+Scoop will place `dotslash.exe` on your `PATH` automatically.
 
 ## Build from source
 
