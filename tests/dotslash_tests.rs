@@ -949,15 +949,17 @@ fn get_extracted_cache_path_simple() -> anyhow::Result<()> {
         "[DOTSLASH_CACHE_DIR]/[PACK_TGZ_HTTP_ARCHIVE_CACHE_DIR]/subdir/[PRINT_ARGV_EXECUTABLE]",
     );
 
-    test_env
-        .dotslash_command()
-        .arg("--")
-        .arg("get-extracted-cache-path")
-        .arg("tests/fixtures/http__tar_gz__print_argv")
-        .assert()
-        .code(0)
-        .stderr_eq("")
-        .stdout_eq("[ARTIFACT_EXE]\n");
+    for subcommand in ["get-extracted-cache-path", "artifact-path"] {
+        test_env
+            .dotslash_command()
+            .arg("--")
+            .arg(subcommand)
+            .arg("tests/fixtures/http__tar_gz__print_argv")
+            .assert()
+            .code(0)
+            .stderr_eq("")
+            .stdout_eq("[ARTIFACT_EXE]\n");
+    }
 
     Ok(())
 }

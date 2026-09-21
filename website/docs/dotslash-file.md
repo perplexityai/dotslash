@@ -393,6 +393,7 @@ properties:
 | `tar.zst` | yes      | zstd        |
 | `tar`     | yes      | _none_      |
 | `zip`     | yes      | zip         |
+| `pkg`     | yes      | xar         |
 | `bz2`     | no       | bzip2       |
 | `gz`      | no       | gzip        |
 | `xz`      | no       | xz          |

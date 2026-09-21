@@ -92,7 +92,7 @@ impl FromStr for Subcommand {
             "create-url-entry" => Ok(Subcommand::CreateUrlEntry),
             "cache-dir" => Ok(Subcommand::CacheDir),
             "fetch" => Ok(Subcommand::Fetch),
-            "get-extracted-cache-path" => Ok(Subcommand::GetExtractedCachePath),
+            "get-extracted-cache-path" | "artifact-path" => Ok(Subcommand::GetExtractedCachePath),
             "parse" => Ok(Subcommand::Parse),
             "sha256" => Ok(Subcommand::Sha256),
             "version" => Ok(Subcommand::Version),
